@@ -74,7 +74,11 @@ def fetch_prices(
 
         # normalise: always return (date, ticker) → close
         if isinstance(raw.columns, pd.MultiIndex):
-            prices = raw["Close"]
+            l0 = raw.columns.get_level_values(0).unique().tolist()
+            if "Close" in l0:
+                prices = raw["Close"]
+            else:
+                prices = raw.xs("Close", axis=1, level=1)
         else:
             prices = raw[["Close"]].rename(columns={"Close": tickers[0]})
 

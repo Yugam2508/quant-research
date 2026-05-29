@@ -76,6 +76,7 @@ def build_snapshot(prices: pd.DataFrame) -> pd.DataFrame:
         ret_1d, ret_5d, ret_20d, ret_60d,
         vol_20d, rsi_14, cs_zscore_20d, price
     """
+    prices = prices.dropna(how="all").dropna(axis=0, thresh=len(prices.columns)//2)
     latest = prices.iloc[-1]
 
     snap = pd.DataFrame(index=prices.columns)

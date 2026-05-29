@@ -1,14 +1,10 @@
 """
 fetcher.py — yfinance data fetcher with parquet caching
-
-Usage:
-    from src.ingestion.fetcher import fetch_prices
-    df = fetch_prices(tickers, period="3mo")
 """
 
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -21,19 +17,13 @@ RAW_DIR = Path(__file__).parents[2] / "data" / "raw"
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _generate_mock_prices(tickers: list[str], n_days: int = 65) -> pd.DataFrame:
-    """
-    Generate realistic-looking synthetic price data for offline testing.
-    Seeded so results are reproducible.
-    """
+def _generate_mock_prices(tickers: list, n_days: int = 65) -> pd.DataFrame:
     console.print("[yellow]⚠ yfinance unavailable — using mock data for testing[/yellow]")
     np.random.seed(42)
     dates = pd.date_range(end=pd.Timestamp.today(), periods=n_days, freq="B")
-    # different starting prices and vols per asset class feel
-    seeds = {t: hash(t) % 1000 for t in tickers}
     data = {}
     for t in tickers:
-        np.random.seed(seeds[t])
+        np.random.seed(hash(t) % 10000)
         drift = np.random.uniform(-0.0005, 0.001)
         vol   = np.random.uniform(0.008, 0.022)
         start = np.random.uniform(50, 500)
@@ -42,18 +32,53 @@ def _generate_mock_prices(tickers: list[str], n_days: int = 65) -> pd.DataFrame:
     return pd.DataFrame(data, index=dates)
 
 
+def _extract_close(raw: pd.DataFrame, tickers: list) -> pd.DataFrame:
+    """
+    Handle the different column structures yfinance returns
+    depending on version and number of tickers requested.
+    """
+    if not isinstance(raw.columns, pd.MultiIndex):
+        # single ticker — flat columns like Close, High, Low...
+        if "Close" in raw.columns:
+            return raw[["Close"]].rename(columns={"Close": tickers[0]})
+        return raw.iloc[:, :1].rename(columns={raw.columns[0]: tickers[0]})
+
+    # multi-level columns — figure out which level has the metric names
+    l0 = raw.columns.get_level_values(0).unique().tolist()
+    l1 = raw.columns.get_level_values(1).unique().tolist()
+
+    if "Close" in l0:
+        # (metric, ticker) — standard older yfinance
+        return raw["Close"]
+    elif "Close" in l1:
+        # (ticker, metric) — some versions flip it
+        return raw.xs("Close", axis=1, level=1)
+    elif "Price" in l0:
+        # newest yfinance uses "Price" as top level
+        sub = raw["Price"]
+        if isinstance(sub, pd.Series):
+            return sub.to_frame(name=tickers[0])
+        return sub
+    else:
+        # fallback: just take the first metric level
+        first = l0[0]
+        console.print(f"[yellow]column guessing — using '{first}' as close proxy[/yellow]")
+        result = raw[first]
+        if isinstance(result, pd.Series):
+            return result.to_frame(name=tickers[0])
+        return result
+
+
 def fetch_prices(
-    tickers: list[str],
+    tickers: list,
     period: str = "3mo",
     force_refresh: bool = False,
 ) -> pd.DataFrame:
     """
     Fetch adjusted close prices for a list of tickers.
-
     Returns a DataFrame indexed by date with tickers as columns.
-    Uses a local parquet cache; refreshes if data is older than 1 day.
     """
-    cache_key = "_".join(sorted(tickers)) + f"_{period}"
+    cache_key  = "_".join(sorted(tickers)) + f"_{period}"
     cache_file = RAW_DIR / f"{cache_key}.parquet"
 
     if not force_refresh and cache_file.exists():
@@ -72,16 +97,7 @@ def fetch_prices(
             threads=True,
         )
 
-        # normalise: always return (date, ticker) → close
-        if isinstance(raw.columns, pd.MultiIndex):
-            l0 = raw.columns.get_level_values(0).unique().tolist()
-            if "Close" in l0:
-                prices = raw["Close"]
-            else:
-                prices = raw.xs("Close", axis=1, level=1)
-        else:
-            prices = raw[["Close"]].rename(columns={"Close": tickers[0]})
-
+        prices = _extract_close(raw, tickers)
         prices = prices.dropna(how="all")
 
         if prices.empty or len(prices) < 5:
@@ -100,6 +116,5 @@ def fetch_prices(
 
 
 def fetch_single(ticker: str, period: str = "1y") -> pd.Series:
-    """Fetch a single ticker, return a Series of close prices."""
     df = fetch_prices([ticker], period=period)
     return df[ticker].dropna()

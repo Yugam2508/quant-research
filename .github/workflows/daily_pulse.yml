@@ -2,15 +2,14 @@ name: daily market pulse
 
 on:
   schedule:
-    # 10:05 UTC = 6:05pm SGT, weekdays
-    - cron: '5 10 * * 1-5'
-  workflow_dispatch:   # allow manual trigger from GitHub UI
+    - cron: '5 10 * * 1-5'   # 6:05pm SGT, weekdays
+  workflow_dispatch:
 
 jobs:
   pulse:
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # needed to commit the report back to the repo
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -28,10 +27,10 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python runs/daily_pulse.py
 
-      - name: commit report
+      - name: commit report + data.json
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add reports/daily/
+          git add reports/daily/ docs/data.json
           git diff --staged --quiet || git commit -m "report: daily pulse $(date +%Y-%m-%d)"
           git push

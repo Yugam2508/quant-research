@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quant Research — Market Pulse</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#09090b;--bg2:#111115;--bg3:#18181d;--bg4:#1f1f26;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.1);--border3:rgba(255,255,255,0.16);
+  --text:#e4e4e8;--muted:#6b6b78;--hint:#3f3f4a;
+  --green:#4ade80;--red:#f87171;--amber:#fbbf24;--blue:#60a5fa;--purple:#a78bfa;
+  --mono:'DM Mono',monospace;--serif:'Instrument Serif',serif;--sans:'DM Sans',sans-serif;
+}
+html{font-size:14px;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+body{min-height:100vh;display:grid;grid-template-rows:48px 1fr;grid-template-columns:1fr}
+
+/* ── topbar ── */
+header{
+  border-bottom:1px solid var(--border);display:flex;align-items:center;
+  padding:0 28px;gap:16px;background:var(--bg);position:sticky;top:0;z-index:50;
+}
+.logo{font-family:var(--mono);font-size:13px;letter-spacing:.06em}
+.logo em{color:var(--green);font-style:normal}
+.regime-pill{
+  margin-left:auto;font-family:var(--mono);font-size:11px;padding:3px 10px;
+  border-radius:99px;border:1px solid var(--border2);color:var(--muted);
+  transition:all .3s;
+}
+.regime-pill.RISK_ON{border-color:var(--green);color:var(--green)}
+.regime-pill.RISK_OFF{border-color:var(--red);color:var(--red)}
+.regime-pill.CRISIS{border-color:var(--red);color:var(--red);animation:pulse-border 1.5s infinite}
+.regime-pill.TRENDING{border-color:var(--amber);color:var(--amber)}
+.regime-pill.MEAN_REVERTING{border-color:var(--blue);color:var(--blue)}
+@keyframes pulse-border{0%,100%{opacity:1}50%{opacity:.5}}
+.as-of{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* ── main layout ── */
+main{display:grid;grid-template-columns:220px 1fr;gap:0;height:calc(100vh - 48px);overflow:hidden}
+
+/* ── nav ── */
+nav{
+  border-right:1px solid var(--border);padding:20px 0;
+  overflow-y:auto;background:var(--bg);
+  display:flex;flex-direction:column;gap:2px;
+}
+.nav-section{padding:0 16px 6px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.1em;color:var(--hint);text-transform:uppercase;margin-top:12px}
+.nav-item{
+  display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;
+  border-left:2px solid transparent;transition:all .1s;font-size:13px;color:var(--muted);
+}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{border-left-color:var(--green);background:var(--bg2);color:var(--text)}
+.nav-item svg{width:14px;height:14px;flex-shrink:0;opacity:.7}
+
+/* ── content area ── */
+.content{overflow-y:auto;background:var(--bg)}
+.page{display:none;padding:32px 40px;max-width:900px}
+.page.active{display:block}
+
+/* ── section headers ── */
+.page-title{font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+  color:var(--muted);text-transform:uppercase;margin-bottom:20px;
+  padding-bottom:10px;border-bottom:1px solid var(--border)}
+
+/* ── metric cards ── */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:24px}
+.metric{background:var(--bg3);border-radius:8px;padding:12px 14px}
+.metric-label{font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:4px}
+.metric-value{font-size:22px;font-weight:500;font-family:var(--mono);line-height:1}
+.metric-value.up{color:var(--green)}.metric-value.down{color:var(--red)}
+.metric-sub{font-size:11px;color:var(--hint);margin-top:3px}
+
+/* ── signal table ── */
+.signal-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;margin-bottom:24px}
+.signal-table th{
+  text-align:left;padding:8px 10px;border-bottom:1px solid var(--border2);
+  color:var(--muted);font-weight:400;font-size:11px;letter-spacing:.05em;
+  position:sticky;top:0;background:var(--bg2);
+}
+.signal-table td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.signal-table tr:hover td{background:var(--bg3)}
+.up{color:var(--green)}.down{color:var(--red)}.neutral{color:var(--muted)}
+.sector-badge{
+  font-size:10px;padding:2px 6px;border-radius:4px;
+  background:var(--bg4);color:var(--muted);
+}
+.rsi-bar{
+  display:inline-flex;align-items:center;gap:5px;
+}
+.rsi-track{width:36px;height:3px;background:var(--border2);border-radius:99px;overflow:hidden}
+.rsi-fill{height:100%;border-radius:99px;background:var(--muted);transition:width .3s}
+.rsi-fill.hot{background:var(--red)}.rsi-fill.cold{background:var(--green)}
+
+/* ── heatmap ── */
+.heatmap{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:4px;margin-bottom:24px}
+.hm-cell{
+  border-radius:6px;padding:8px 10px;cursor:pointer;transition:opacity .15s;
+  border:1px solid transparent;
+}
+.hm-cell:hover{opacity:.8}
+.hm-ticker{font-family:var(--mono);font-size:11px;font-weight:500;margin-bottom:2px}
+.hm-ret{font-family:var(--mono);font-size:13px;font-weight:500}
+.hm-sector{font-size:10px;opacity:.7;margin-top:1px}
+
+/* ── chart container ── */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px}
+.chart-title{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;
+  display:flex;justify-content:space-between;align-items:center}
+.chart-wrap{position:relative;height:160px}
+
+/* ── correlation matrix ── */
+.corr-grid{display:grid;gap:2px;margin-bottom:24px;overflow-x:auto}
+.corr-cell{width:28px;height:28px;border-radius:3px;cursor:default;
+  display:flex;align-items:center;justify-content:center;font-size:9px;
+  font-family:var(--mono);color:rgba(255,255,255,.7)}
+.corr-label{font-family:var(--mono);font-size:10px;color:var(--muted);
+  display:flex;align-items:center;height:28px;padding-right:6px;white-space:nowrap}
+
+/* ── ai memo ── */
+.memo{line-height:1.75}
+.memo h1{font-family:var(--serif);font-size:24px;font-weight:400;
+  color:var(--text);margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.memo h2{font-family:var(--mono);font-size:10px;font-weight:500;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--green);
+  margin:28px 0 10px}
+.memo p{color:var(--text);font-size:14px;margin-bottom:12px}
+.memo ul{list-style:none;margin-bottom:12px}
+.memo ul li{padding:6px 0 6px 14px;border-left:2px solid var(--border2);
+  margin-bottom:4px;font-size:13px;line-height:1.65}
+.memo ul li strong{color:var(--blue)}
+.memo table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;margin:10px 0 20px}
+.memo th{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border2);
+  color:var(--muted);font-weight:400}
+.memo td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.memo tr:hover td{background:var(--bg3)}
+.memo blockquote{border-left:2px solid var(--border2);padding:6px 14px;
+  color:var(--muted);font-size:13px;margin:0 0 12px}
+.memo hr{border:none;border-top:1px solid var(--border);margin:20px 0}
+.memo code{font-family:var(--mono);font-size:11px;background:var(--bg3);
+  padding:2px 5px;border-radius:3px;color:var(--blue)}
+
+/* ── judge badge ── */
+.judge-bar{
+  display:flex;gap:16px;align-items:center;margin-bottom:20px;
+  padding:10px 14px;background:var(--bg3);border-radius:8px;
+  border:1px solid var(--border);flex-wrap:wrap;
+}
+.judge-score{font-family:var(--mono);font-size:20px;font-weight:500}
+.judge-score.pass{color:var(--green)}.judge-score.flag{color:var(--amber)}
+.judge-dims{display:flex;gap:12px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.judge-dim span{color:var(--text)}
+.judge-label{font-size:11px;color:var(--muted)}
+
+/* ── loading ── */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:60vh;gap:10px;color:var(--muted);font-family:var(--mono);font-size:12px}
+.spinner{width:20px;height:20px;border:2px solid var(--border2);border-top-color:var(--green);
+  border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><em>quant</em>/research</div>
+  <div class="regime-pill" id="regimePill">loading...</div>
+  <div class="as-of" id="asOf">—</div>
+</header>
+
+<main>
+<nav>
+  <div class="nav-section">market</div>
+  <div class="nav-item active" data-page="overview" onclick="showPage('overview',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Overview
+  </div>
+  <div class="nav-item" data-page="signals" onclick="showPage('signals',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
+    Signals
+  </div>
+  <div class="nav-item" data-page="charts" onclick="showPage('charts',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Charts
+  </div>
+  <div class="nav-item" data-page="risk" onclick="showPage('risk',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    Risk
+  </div>
+  <div class="nav-section">analysis</div>
+  <div class="nav-item" data-page="memo" onclick="showPage('memo',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    AI Memo
+  </div>
+</nav>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <div class="page active" id="page-overview">
+    <div class="page-title">overview</div>
+    <div class="metrics" id="overviewMetrics"></div>
+    <div class="page-title" style="margin-top:8px">signal heatmap — 1D return</div>
+    <div class="heatmap" id="heatmap"></div>
+  </div>
+
+  <!-- SIGNALS -->
+  <div class="page" id="page-signals">
+    <div class="page-title">full signal table</div>
+    <table class="signal-table">
+      <thead>
+        <tr>
+          <th>ticker</th><th>name</th><th>sector</th>
+          <th>1D %</th><th>5D %</th><th>20D %</th>
+          <th>vol</th><th>RSI</th><th>z-score</th>
+        </tr>
+      </thead>
+      <tbody id="signalTableBody"></tbody>
+    </table>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="page" id="page-charts">
+    <div class="page-title">momentum snapshot</div>
+    <div class="chart-grid" id="chartGrid">
+      <div class="chart-card">
+        <div class="chart-title"><span>1D returns — all assets</span></div>
+        <div class="chart-wrap"><canvas id="chart1d"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><span>20D returns — all assets</span></div>
+        <div class="chart-wrap"><canvas id="chart20d"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><span>RSI — overbought / oversold</span></div>
+        <div class="chart-wrap"><canvas id="chartRsi"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><span>volatility — annualised 20D</span></div>
+        <div class="chart-wrap"><canvas id="chartVol"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RISK -->
+  <div class="page" id="page-risk">
+    <div class="page-title">risk monitor</div>
+    <div class="metrics" id="riskMetrics"></div>
+    <div class="page-title" style="margin-top:8px">cross-sectional z-scores</div>
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-wrap" style="height:200px"><canvas id="chartZscore"></canvas></div>
+    </div>
+    <div class="page-title">vol rank</div>
+    <div class="chart-card">
+      <div class="chart-wrap" style="height:200px"><canvas id="chartVolRank"></canvas></div>
+    </div>
+  </div>
+
+  <!-- MEMO -->
+  <div class="page" id="page-memo">
+    <div class="page-title">AI market memo</div>
+    <div id="judgeBadge"></div>
+    <div class="memo" id="memoContent">
+      <div class="loading"><div class="spinner"></div>loading report...</div>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<script>
+let D = null;
+const CHART_DEFAULTS = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{legend:{display:false}},
+  animation:{duration:400},
+};
+
+async function loadData() {
+  try {
+    const r = await fetch('data.json?t=' + Date.now());
+    D = await r.json();
+    render();
+  } catch(e) {
+    document.getElementById('page-overview').innerHTML =
+      '<div class="loading">no data.json found — run the daily pulse first<br><code style="margin-top:8px;font-size:11px">python runs/daily_pulse.py</code></div>';
+  }
+}
+
+function fmt(v, decimals=1) {
+  if (v == null || isNaN(v)) return '—';
+  return (v >= 0 ? '+' : '') + v.toFixed(decimals);
+}
+function cls(v) { return v == null || isNaN(v) ? 'neutral' : v > 0 ? 'up' : v < 0 ? 'down' : 'neutral'; }
+
+function heatColor(ret) {
+  if (ret == null || isNaN(ret)) return {bg:'rgba(255,255,255,0.04)', text:'#6b6b78'};
+  const abs = Math.min(Math.abs(ret), 5);
+  const intensity = abs / 5;
+  if (ret > 0) {
+    const g = Math.round(90 + intensity * 100);
+    return {bg:`rgba(74,${g},128,${0.12 + intensity*0.35})`, text:`rgb(74,${g},128)`};
+  } else {
+    const r = Math.round(200 + intensity * 55);
+    return {bg:`rgba(${r},80,80,${0.12 + intensity*0.35})`, text:`rgb(${r},80,80)`};
+  }
+}
+
+function render() {
+  if (!D) return;
+  const signals = D.signals || [];
+  const regime  = D.regime  || {};
+  const eval_   = D.evaluation || {};
+  const asOf    = D.as_of || '';
+
+  // topbar
+  const pill = document.getElementById('regimePill');
+  if (regime.regime) {
+    pill.textContent = regime.regime.replace('_',' ');
+    pill.className = 'regime-pill ' + regime.regime;
+  }
+  document.getElementById('asOf').textContent = asOf;
+
+  renderOverview(signals, regime);
+  renderSignals(signals);
+  renderCharts(signals);
+  renderRisk(signals);
+  renderMemo(eval_);
+}
+
+function renderOverview(signals, regime) {
+  const positives = signals.filter(s => s.ret_1d > 0).length;
+  const avgRet    = signals.reduce((a,s) => a + (s.ret_1d||0), 0) / signals.length;
+  const avgVol    = signals.reduce((a,s) => a + (s.vol_20d||0), 0) / signals.length;
+  const avgRsi    = signals.reduce((a,s) => a + (s.rsi_14||0), 0) / signals.length;
+
+  document.getElementById('overviewMetrics').innerHTML = `
+    <div class="metric">
+      <div class="metric-label">avg 1D return</div>
+      <div class="metric-value ${avgRet>=0?'up':'down'}">${fmt(avgRet)}%</div>
+      <div class="metric-sub">${positives}/${signals.length} positive</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">avg volatility</div>
+      <div class="metric-value">${fmt(avgVol,1)}%</div>
+      <div class="metric-sub">annualised 20D</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">avg RSI</div>
+      <div class="metric-value ${avgRsi>60?'down':avgRsi<40?'up':'neutral'}">${fmt(avgRsi,0)}</div>
+      <div class="metric-sub">${avgRsi>70?'overbought':avgRsi<30?'oversold':'neutral'}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">regime</div>
+      <div class="metric-value" style="font-size:14px;line-height:1.3">${(regime.regime||'—').replace('_',' ')}</div>
+      <div class="metric-sub">${regime.confidence ? Math.round(regime.confidence*100)+'% conf' : ''}</div>
+    </div>
+  `;
+
+  const sorted = [...signals].sort((a,b) => (b.ret_1d||0)-(a.ret_1d||0));
+  document.getElementById('heatmap').innerHTML = sorted.map(s => {
+    const c = heatColor(s.ret_1d);
+    return `<div class="hm-cell" style="background:${c.bg};border-color:${c.bg}">
+      <div class="hm-ticker" style="color:${c.text}">${s.ticker.replace('-USD','').replace('=F','')}</div>
+      <div class="hm-ret" style="color:${c.text}">${fmt(s.ret_1d)}%</div>
+      <div class="hm-sector">${(s.sector||'').split(' ')[0]}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSignals(signals) {
+  document.getElementById('signalTableBody').innerHTML = signals.map(s => {
+    const rsiPct = s.rsi_14 ? Math.round(s.rsi_14) : 50;
+    const rsiClass = rsiPct > 70 ? 'hot' : rsiPct < 30 ? 'cold' : '';
+    return `<tr>
+      <td style="font-weight:500">${s.ticker}</td>
+      <td style="color:var(--muted)">${s.name}</td>
+      <td><span class="sector-badge">${s.sector||'—'}</span></td>
+      <td class="${cls(s.ret_1d)}">${fmt(s.ret_1d)}%</td>
+      <td class="${cls(s.ret_5d)}">${fmt(s.ret_5d)}%</td>
+      <td class="${cls(s.ret_20d)}">${fmt(s.ret_20d)}%</td>
+      <td>${fmt(s.vol_20d)}%</td>
+      <td><div class="rsi-bar">
+        <div class="rsi-track"><div class="rsi-fill ${rsiClass}" style="width:${rsiPct}%"></div></div>
+        <span class="${rsiClass==='hot'?'down':rsiClass==='cold'?'up':'neutral'}">${rsiPct}</span>
+      </div></td>
+      <td class="${cls(s.cs_zscore)}">${fmt(s.cs_zscore,2)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function barColors(vals) {
+  return vals.map(v => v >= 0 ? 'rgba(74,222,128,0.75)' : 'rgba(248,113,113,0.75)');
+}
+
+let charts = {};
+function makeChart(id, type, labels, datasets, extra={}) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  charts[id] = new Chart(ctx, {
+    type, data:{labels,datasets},
+    options:{...CHART_DEFAULTS,...extra,
+      scales:{
+        x:{ticks:{color:'#6b6b78',font:{family:'DM Mono',size:10}},grid:{color:'rgba(255,255,255,0.04)'}},
+        y:{ticks:{color:'#6b6b78',font:{family:'DM Mono',size:10}},grid:{color:'rgba(255,255,255,0.04)'}},
+        ...(extra.scales||{})
+      }
+    }
+  });
+}
+
+function renderCharts(signals) {
+  const tickers = signals.map(s => s.ticker.replace('-USD','').replace('=F',''));
+  const ret1d  = signals.map(s => s.ret_1d || 0);
+  const ret20d = signals.map(s => s.ret_20d || 0);
+  const rsi    = signals.map(s => s.rsi_14 || 50);
+  const vol    = signals.map(s => s.vol_20d || 0);
+
+  makeChart('chart1d','bar', tickers,
+    [{data:ret1d, backgroundColor:barColors(ret1d), borderRadius:3}]);
+  makeChart('chart20d','bar', tickers,
+    [{data:ret20d, backgroundColor:barColors(ret20d), borderRadius:3}]);
+  makeChart('chartRsi','bar', tickers, [{
+    data:rsi,
+    backgroundColor: rsi.map(v => v>70?'rgba(248,113,113,0.75)':v<30?'rgba(74,222,128,0.75)':'rgba(96,165,250,0.5)'),
+    borderRadius:3
+  }], {
+    scales:{
+      y:{min:0,max:100,
+        ticks:{color:'#6b6b78',font:{family:'DM Mono',size:10}},
+        grid:{color:'rgba(255,255,255,0.04)'}
+      },
+      x:{ticks:{color:'#6b6b78',font:{family:'DM Mono',size:10}},grid:{color:'rgba(255,255,255,0.04)'}}
+    }
+  });
+  makeChart('chartVol','bar', tickers,
+    [{data:vol, backgroundColor:'rgba(167,139,250,0.6)', borderRadius:3}]);
+}
+
+function renderRisk(signals) {
+  const vols  = signals.map(s => s.vol_20d||0);
+  const zs    = signals.map(s => s.cs_zscore||0);
+  const maxVol   = Math.max(...vols).toFixed(1);
+  const maxAbs   = Math.max(...zs.map(Math.abs)).toFixed(2);
+  const nOB      = signals.filter(s => s.rsi_14 > 70).length;
+  const nOS      = signals.filter(s => s.rsi_14 < 30).length;
+
+  document.getElementById('riskMetrics').innerHTML = `
+    <div class="metric">
+      <div class="metric-label">max volatility</div>
+      <div class="metric-value">${maxVol}%</div>
+      <div class="metric-sub">${signals.find(s=>s.vol_20d==Math.max(...vols))?.ticker||''}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">overbought (RSI>70)</div>
+      <div class="metric-value ${nOB>0?'down':'neutral'}">${nOB}</div>
+      <div class="metric-sub">assets</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">oversold (RSI<30)</div>
+      <div class="metric-value ${nOS>0?'up':'neutral'}">${nOS}</div>
+      <div class="metric-sub">assets</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">max |z-score|</div>
+      <div class="metric-value">${maxAbs}</div>
+      <div class="metric-sub">dispersion</div>
+    </div>
+  `;
+
+  const tickers = signals.map(s => s.ticker.replace('-USD','').replace('=F',''));
+  makeChart('chartZscore','bar', tickers, [{
+    data:zs,
+    backgroundColor:zs.map(v => v>=0?'rgba(74,222,128,0.7)':'rgba(248,113,113,0.7)'),
+    borderRadius:3
+  }]);
+
+  const volSorted = [...signals].sort((a,b)=>(b.vol_20d||0)-(a.vol_20d||0));
+  makeChart('chartVolRank','bar',
+    volSorted.map(s=>s.ticker.replace('-USD','').replace('=F','')),
+    [{data:volSorted.map(s=>s.vol_20d||0),
+      backgroundColor:'rgba(251,191,36,0.65)',borderRadius:3}]);
+}
+
+function renderMemo(evaluation) {
+  const badge = document.getElementById('judgeBadge');
+  if (evaluation && evaluation.score) {
+    const pass = evaluation.verdict === 'PASS';
+    badge.innerHTML = `<div class="judge-bar">
+      <div>
+        <div class="judge-label">quality score</div>
+        <div class="judge-score ${pass?'pass':'flag'}">${evaluation.score}/10</div>
+      </div>
+      <div class="judge-dims">
+        <div>spec <span>${evaluation.specificity}</span></div>
+        <div>acc <span>${evaluation.accuracy}</span></div>
+        <div>act <span>${evaluation.actionability}</span></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);flex:1">${evaluation.critique||''}</div>
+    </div>`;
+  }
+
+  // load the matching markdown report
+  const asOf = D.as_of || '';
+  fetch(`../reports/daily/${asOf}.md`)
+    .then(r => r.ok ? r.text() : fetch('../reports/daily/2025-05-29-sample.md').then(r=>r.text()))
+    .then(md => {
+      document.getElementById('memoContent').innerHTML = marked.parse(md);
+    })
+    .catch(() => {
+      document.getElementById('memoContent').innerHTML =
+        '<p style="color:var(--muted)">No report found for today. Run the daily pulse first.</p>';
+    });
+}
+
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  el.classList.add('active');
+}
+
+loadData();
+</script>
+</body>
+</html>

@@ -1,8 +1,8 @@
 """
 analyst.py — Gemini-powered market analysis layer
 
-Uses google-genai (the new SDK) with gemini-2.5-flash.
-Set GEMINI_API_KEY in your .env file.
+Uses google-genai with gemini-2.5-flash.
+Accepts regime classification and prior context for richer analysis.
 """
 
 import os
@@ -16,6 +16,14 @@ console = Console()
 
 _client = None
 
+STYLE_INSTRUCTIONS = {
+    "momentum_focus":   "Focus on momentum leaders and laggards. Identify which trends have legs.",
+    "defensive_focus":  "Focus on defensive positioning. Highlight safe havens and risk-off signals.",
+    "dispersion_focus": "Focus on cross-sectional dispersion. Identify rotation themes and sector divergences.",
+    "reversion_focus":  "Focus on mean-reversion setups. Highlight overbought/oversold extremes.",
+    "crisis_focus":     "Focus on risk management. Flag correlation breakdown, vol spikes, and tail risks.",
+}
+
 
 def _get_client():
     global _client
@@ -23,15 +31,31 @@ def _get_client():
         from google import genai
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            raise EnvironmentError(
-                "GEMINI_API_KEY not set. "
-                "Add it to your .env file."
-            )
+            raise EnvironmentError("GEMINI_API_KEY not set. Add it to your .env file.")
         _client = genai.Client(api_key=api_key)
     return _client
 
 
-def _build_prompt(snapshot: pd.DataFrame, ticker_meta: dict, as_of: date) -> tuple[str, str]:
+def generate_daily_pulse(
+    snapshot: pd.DataFrame,
+    ticker_meta: dict,
+    as_of: date,
+    regime: dict = None,
+    prior_context: str = "",
+) -> str:
+    """
+    Generate a daily market pulse memo.
+
+    Args:
+        snapshot      : DataFrame from signals.build_snapshot()
+        ticker_meta   : dict mapping ticker → {name, sector}
+        as_of         : date of the report
+        regime        : output from router.classify_regime() — optional
+        prior_context : output from steerer.build_context() — optional
+
+    Returns:
+        Markdown string — the full report.
+    """
     rows = []
     for ticker, row in snapshot.iterrows():
         meta = ticker_meta.get(ticker, {})
@@ -51,17 +75,31 @@ def _build_prompt(snapshot: pd.DataFrame, ticker_meta: dict, as_of: date) -> tup
 
     data_json = json.dumps(rows, indent=2, default=str)
 
-    system = (
+    # build regime block
+    regime_block = ""
+    style_instruction = STYLE_INSTRUCTIONS["momentum_focus"]
+    if regime:
+        style_instruction = STYLE_INSTRUCTIONS.get(
+            regime.get("prompt_style", ""), style_instruction
+        )
+        regime_block = f"""
+## detected regime: {regime['regime']} (confidence: {regime['confidence']:.0%})
+{regime['reasoning']}
+"""
+
+    system_prompt = (
         "You are a senior quantitative analyst writing a daily internal market memo. "
         "Your audience is experienced investors who want signal, not noise. "
         "Write with precision and dry wit. Avoid filler phrases. "
-        "Use concrete numbers. Flag genuine anomalies. Be concise."
+        "Use concrete numbers. Flag genuine anomalies. Be concise.\n\n"
+        f"Analysis style for today: {style_instruction}"
     )
 
-    user = f"""Today is {as_of.strftime('%A, %d %B %Y')}.
+    user_prompt = f"""Today is {as_of.strftime('%A, %d %B %Y')}.
+{regime_block}
+{prior_context}
 
-Here is the cross-asset signal snapshot:
-
+Cross-asset signal snapshot:
 {data_json}
 
 Write a daily market pulse memo in this exact markdown structure:
@@ -69,41 +107,31 @@ Write a daily market pulse memo in this exact markdown structure:
 # Market Pulse — {as_of.strftime('%d %b %Y')}
 
 ## regime read
-One paragraph (3–5 sentences). What is the market telling us today? Characterise the broad risk environment — risk-on/off, sector rotation, any divergences between equities / bonds / commodities / crypto. Name specific tickers and numbers.
+One paragraph (3–5 sentences). Characterise the broad risk environment. Name specific tickers and numbers. Note anything continuing or reversing from prior sessions if context was provided.
 
 ## top movers
-A compact markdown table with the 5 biggest movers (by absolute 1-day return), showing: Ticker | Name | 1D % | 5D % | RSI | Signal.
-In the Signal column write one of: 🔥 momentum | ❄️ oversold | ⚡ breakout | 🔻 breakdown | ➡️ neutral
+Markdown table — 5 biggest movers by absolute 1D return: Ticker | Name | 1D % | 5D % | RSI | Signal
+Signal column: 🔥 momentum | ❄️ oversold | ⚡ breakout | 🔻 breakdown | ➡️ neutral
 
 ## cross-asset radar
-Bullet list. One bullet per sector (US Equity, Fixed Income, Commodities, Crypto, International). Each bullet: sector name, 1–2 sentence observation using the data.
+One bullet per sector. Each bullet: sector name, 1–2 sentence observation with numbers.
 
 ## signals worth watching
-3 tickers with the most interesting signal setups right now (high RSI divergence, momentum extremes, vol compression, etc). For each: ticker, the setup in one sentence, what to watch.
+3 tickers with the most interesting setups. For each: ticker, the setup in one sentence, what to watch.
 
 ## quant footnote
-One sentence of dry, technical observation about the data — something a PM would actually find useful."""
-
-    return system, user
-
-
-def generate_daily_pulse(
-    snapshot: pd.DataFrame,
-    ticker_meta: dict,
-    as_of: date,
-) -> str:
-    system, user = _build_prompt(snapshot, ticker_meta, as_of)
+One sentence of dry technical observation a PM would find useful."""
 
     console.print("[cyan]calling Gemini for market analysis...[/cyan]")
 
     from google.genai import types
-    client = _get_client()
-    response = client.models.generate_content(
+    response = _get_client().models.generate_content(
         model="gemini-2.5-flash",
-        contents=user,
+        contents=user_prompt,
         config=types.GenerateContentConfig(
-            system_instruction=system,
-            max_output_tokens=1500,
+            system_instruction=system_prompt,
+            max_output_tokens=1800,
+            temperature=0.4,
         ),
     )
 
@@ -117,19 +145,17 @@ def generate_risk_comment(snapshot: pd.DataFrame, as_of: date) -> str:
 
     prompt = (
         f"Date: {as_of}. "
-        f"High vol names: {high_vol.to_dict()}. "
+        f"High vol: {high_vol.to_dict()}. "
         f"Overbought (RSI>70): {overbought}. "
         f"Oversold (RSI<30): {oversold}.\n\n"
-        "Write a single risk comment sentence (max 40 words) for the bottom of a daily market report. "
+        "Write one risk comment sentence (max 40 words) for the bottom of a daily report. "
         "Be specific and dry. No filler."
     )
 
     from google.genai import types
-    client = _get_client()
-    response = client.models.generate_content(
+    response = _get_client().models.generate_content(
         model="gemini-2.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(max_output_tokens=100),
     )
-
     return response.text.strip()

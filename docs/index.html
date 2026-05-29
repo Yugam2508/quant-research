@@ -198,6 +198,10 @@ nav{
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
     Risk
   </div>
+  <div class="nav-item" data-page="backtest" onclick="showPage('backtest',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+    Backtest
+  </div>
   <div class="nav-section">analysis</div>
   <div class="nav-item" data-page="memo" onclick="showPage('memo',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -275,6 +279,39 @@ nav{
       <div class="loading"><div class="spinner"></div>loading report...</div>
     </div>
   </div>
+
+  <!-- BACKTEST -->
+  <div class="page" id="page-backtest">
+    <div class="page-title">differentiable portfolio backtest — JAX</div>
+    <div id="bt-loading" class="loading"><div class="spinner"></div>loading backtest results...</div>
+    <div id="bt-content" style="display:none">
+      <div class="metrics" id="btMetrics"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0 8px">
+        <div class="page-title" style="margin:0;align-self:center">cumulative returns</div>
+        <div style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)" id="btSubtitle"></div>
+      </div>
+      <div class="chart-card" style="margin-bottom:16px">
+        <div class="chart-wrap" style="height:260px"><canvas id="btCumReturns"></canvas></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div>
+          <div class="page-title" style="margin-bottom:8px">walk-forward OOS sharpe</div>
+          <div class="chart-card">
+            <div class="chart-wrap" style="height:180px"><canvas id="btWfSharpe"></canvas></div>
+          </div>
+        </div>
+        <div>
+          <div class="page-title" style="margin-bottom:8px">drawdown</div>
+          <div class="chart-card">
+            <div class="chart-wrap" style="height:180px"><canvas id="btDrawdown"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="page-title" style="margin-bottom:8px">methodology</div>
+      <div id="btMethodology"></div>
+    </div>
+  </div>
+
 
 </div>
 </main>
@@ -533,6 +570,208 @@ function showPage(id, el) {
 }
 
 loadData();
+loadBacktest();
+
+// ── BACKTEST PAGE ─────────────────────────────────────────────────────────────
+
+let BT = null;
+
+async function loadBacktest() {
+  try {
+    const r = await fetch('backtest.json?t=' + Date.now());
+    BT = await r.json();
+    renderBacktest();
+  } catch(e) {
+    document.getElementById('bt-loading').innerHTML =
+      '<div style="color:var(--muted);font-family:var(--mono);font-size:12px">no backtest.json found — run <code>python runs/backtest.py</code></div>';
+  }
+}
+
+function renderBacktest() {
+  if (!BT) return;
+  document.getElementById('bt-loading').style.display = 'none';
+  document.getElementById('bt-content').style.display = 'block';
+
+  const s  = BT.strategy;
+  const b  = BT.benchmark;
+  const edge = BT.sharpe_edge;
+  const edgeColor = edge >= 0 ? 'var(--green)' : 'var(--red)';
+
+  document.getElementById('btSubtitle').textContent =
+    `${BT.n_assets} assets · ${BT.n_days} days · model: ${BT.model} · ${BT.config.epochs} epochs`;
+
+  // metric cards
+  document.getElementById('btMetrics').innerHTML = `
+    <div class="metric">
+      <div class="metric-label">strategy sharpe</div>
+      <div class="metric-value" style="color:var(--green)">${s.sharpe.toFixed(3)}</div>
+      <div class="metric-sub">annualised OOS</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">benchmark sharpe</div>
+      <div class="metric-value" style="color:var(--muted)">${b.sharpe.toFixed(3)}</div>
+      <div class="metric-sub">equal weight</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">sharpe edge</div>
+      <div class="metric-value" style="color:${edgeColor}">${edge >= 0 ? '+' : ''}${edge.toFixed(3)}</div>
+      <div class="metric-sub">vs benchmark</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">total return</div>
+      <div class="metric-value ${s.total_return >= 0 ? 'up' : 'down'}">${s.total_return >= 0 ? '+' : ''}${s.total_return.toFixed(1)}%</div>
+      <div class="metric-sub">vs ${b.total_return >= 0 ? '+' : ''}${b.total_return.toFixed(1)}% bench</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">max drawdown</div>
+      <div class="metric-value" style="color:var(--amber)">${s.max_drawdown.toFixed(1)}%</div>
+      <div class="metric-sub">vs ${b.max_drawdown.toFixed(1)}% bench</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">calmar ratio</div>
+      <div class="metric-value ${s.calmar >= 1 ? 'up' : 'neutral'}">${s.calmar.toFixed(2)}</div>
+      <div class="metric-sub">return / drawdown</div>
+    </div>
+  `;
+
+  // cumulative returns chart
+  const oosRets   = BT.oos_returns;
+  const benchRets = BT.bench_returns;
+  const dates     = BT.dates;
+
+  // compute cumulative
+  let sCum = 1, bCum = 1;
+  const sCumArr = [], bCumArr = [];
+  for (let i = 0; i < oosRets.length; i++) {
+    sCum *= (1 + oosRets[i]);
+    bCum *= (1 + benchRets[i]);
+    sCumArr.push(((sCum - 1) * 100).toFixed(2));
+    bCumArr.push(((bCum - 1) * 100).toFixed(2));
+  }
+
+  // thin out labels for readability (every 21 days)
+  const labelDates = dates.map((d, i) => i % 21 === 0 ? d.slice(0, 10) : '');
+
+  if (charts['btCumReturns']) charts['btCumReturns'].destroy();
+  charts['btCumReturns'] = new Chart(document.getElementById('btCumReturns'), {
+    type: 'line',
+    data: {
+      labels: labelDates,
+      datasets: [
+        {
+          label: 'Strategy', data: sCumArr,
+          borderColor: '#4ade80', borderWidth: 1.5,
+          pointRadius: 0, fill: false, tension: 0.3,
+        },
+        {
+          label: 'Benchmark', data: bCumArr,
+          borderColor: '#6b6b78', borderWidth: 1, borderDash: [4, 4],
+          pointRadius: 0, fill: false, tension: 0.3,
+        }
+      ]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: '#6b6b78', font: { family: 'DM Mono', size: 11 }, boxWidth: 20 }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#6b6b78', font: { family: 'DM Mono', size: 10 }, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: {
+          ticks: { color: '#6b6b78', font: { family: 'DM Mono', size: 10 }, callback: v => v + '%' },
+          grid: { color: 'rgba(255,255,255,0.04)' }
+        }
+      }
+    }
+  });
+
+  // walk-forward OOS sharpe bar chart
+  const wfDates  = BT.window_dates.map(d => d.slice(0, 10));
+  const oosSh    = BT.oos_sharpes;
+  const trainSh  = BT.train_sharpes;
+
+  if (charts['btWfSharpe']) charts['btWfSharpe'].destroy();
+  charts['btWfSharpe'] = new Chart(document.getElementById('btWfSharpe'), {
+    type: 'bar',
+    data: {
+      labels: wfDates,
+      datasets: [
+        {
+          label: 'OOS',
+          data: oosSh,
+          backgroundColor: oosSh.map(v => v >= 0 ? 'rgba(74,222,128,0.7)' : 'rgba(248,113,113,0.7)'),
+          borderRadius: 3,
+        }
+      ]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      scales: {
+        x: { ticks: { color: '#6b6b78', font: { family: 'DM Mono', size: 9 }, maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: '#6b6b78', font: { family: 'DM Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+      }
+    }
+  });
+
+  // drawdown chart
+  let peak = 1, cumD = 1;
+  const ddArr = [];
+  for (let i = 0; i < oosRets.length; i++) {
+    cumD *= (1 + oosRets[i]);
+    if (cumD > peak) peak = cumD;
+    ddArr.push((((cumD / peak) - 1) * 100).toFixed(2));
+  }
+
+  if (charts['btDrawdown']) charts['btDrawdown'].destroy();
+  charts['btDrawdown'] = new Chart(document.getElementById('btDrawdown'), {
+    type: 'line',
+    data: {
+      labels: labelDates,
+      datasets: [{
+        data: ddArr,
+        borderColor: '#f87171', borderWidth: 1.5,
+        pointRadius: 0,
+        fill: { target: 'origin', above: 'rgba(248,113,113,0.08)' },
+        tension: 0.2,
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      scales: {
+        x: { ticks: { color: '#6b6b78', font: { family: 'DM Mono', size: 10 }, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: '#6b6b78', font: { family: 'DM Mono', size: 10 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.04)' } }
+      }
+    }
+  });
+
+  // methodology card
+  document.getElementById('btMethodology').innerHTML = `
+    <div style="background:var(--bg3);border-radius:8px;padding:16px 20px;font-size:13px;line-height:1.8;color:var(--muted)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <div style="color:var(--text);font-weight:500;margin-bottom:8px;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em">architecture</div>
+          <div>Signal network: Linear → ReLU → LayerNorm (×2) → Softmax</div>
+          <div>Input: 6 signals × ${BT.n_assets} assets (momentum, vol, RSI, z-score)</div>
+          <div>Output: long-only portfolio weights summing to 1</div>
+          <div>Optimiser: Adam, lr=1e-3, ${BT.config.epochs} epochs per window</div>
+        </div>
+        <div>
+          <div style="color:var(--text);font-weight:500;margin-bottom:8px;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em">validation</div>
+          <div>Walk-forward: ${BT.config.train_window}D train → ${BT.config.test_window}D OOS test</div>
+          <div>Step size: 21 days (monthly roll)</div>
+          <div>Transaction cost: ${BT.config.tc_bps}bps round-trip penalty</div>
+          <div>Loss: −Sharpe + TC penalty (fully differentiable via JAX)</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// load backtest data when page is first visited
+const _origShowPage = showPage;
 </script>
 </body>
 </html>

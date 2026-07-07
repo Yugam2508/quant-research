@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live Paper-Trading Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+ body{font-family:system-ui,sans-serif;max-width:960px;margin:2rem auto;
+      padding:0 1rem;color:#1a1a2e;background:#fafafa}
+ h1{font-size:1.4rem} h2{font-size:1.05rem;margin-top:2rem}
+ .banner{background:#fff3cd;border:1px solid #ffec99;border-radius:8px;
+         padding:.7rem 1rem;font-size:.9rem}
+ .cards{display:flex;gap:1rem;flex-wrap:wrap;margin:1rem 0}
+ .card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;
+       padding:.8rem 1.2rem;min-width:130px}
+ .card .v{font-size:1.4rem;font-weight:700}
+ .card .l{font-size:.75rem;color:#777;text-transform:uppercase}
+ table{border-collapse:collapse;width:100%;font-size:.85rem;background:#fff}
+ th,td{border:1px solid #e5e5e5;padding:.4rem .6rem;text-align:left}
+ th{background:#f0f0f5} .neg{color:#c0392b}.pos{color:#27ae60}
+ .muted{color:#888;font-size:.8rem}
+</style></head><body>
+<h1>Live Paper-Trading Dashboard</h1>
+<div class="banner"><b>Paper trading (Binance demo, no real capital).</b>
+The pre-registered research gate was failed on single-name concentration
+risk; this system runs to validate execution infrastructure. Returns shown
+are simulated and statistically insignificant by construction.</div>
+<div class="cards">
+ <div class="card"><div class="v" id="c-eq"></div><div class="l">Equity USDT</div></div>
+ <div class="card"><div class="v" id="c-ret"></div><div class="l">Return since start</div></div>
+ <div class="card"><div class="v" id="c-gross"></div><div class="l">Gross exposure</div></div>
+ <div class="card"><div class="v" id="c-net"></div><div class="l">Net exposure</div></div>
+ <div class="card"><div class="v" id="c-slip"></div><div class="l">Avg slippage (bps)</div></div>
+</div>
+<h2>Equity curve</h2><canvas id="chart" height="90"></canvas>
+<h2>Current book</h2><table id="book"><tr><th>Symbol</th><th>Side</th>
+<th>Notional (USDT)</th></tr></table>
+<h2>Fill-level slippage (intended vs filled)</h2>
+<table id="slip"><tr><th>Symbol</th><th>Order size</th><th>Cost (bps)</th></tr></table>
+<h2>Event log</h2>
+<table id="ev"><tr><th>Time</th><th>Kind</th><th>Detail</th></tr></table>
+<p class="muted" id="gen"></p>
+<script>
+const D = {"generated": "2026-07-07 13:15 UTC", "equity": [["2026-07-07 14:35", 5000.0], ["2026-07-07 14:36", 5000.0], ["2026-07-07 14:38", 4987.3615961], ["2026-07-07 14:41", 4988.42104133], ["2026-07-07 14:50", 4987.64930065], ["2026-07-07 14:53", 4988.86996723]], "init": 5000.0, "last": 4988.86996723, "ret_pct": -0.22, "slippage": [{"symbol": "AGT", "bps": 0.87, "usdt": 120.1}, {"symbol": "BEAT", "bps": 33.42, "usdt": 129.4}, {"symbol": "BEL", "bps": 17.75, "usdt": 206.8}, {"symbol": "GUA", "bps": -0.0, "usdt": 173.3}, {"symbol": "H", "bps": 2.86, "usdt": 90.3}, {"symbol": "HEI", "bps": 0.0, "usdt": 145.2}, {"symbol": "HMSTR", "bps": 3.27, "usdt": 158.2}, {"symbol": "IOTX", "bps": -0.0, "usdt": 225.0}, {"symbol": "LAB", "bps": 0.0, "usdt": 71.1}, {"symbol": "RDNT", "bps": -0.0, "usdt": 225.0}, {"symbol": "RIF", "bps": 17.67, "usdt": 152.9}, {"symbol": "SKYAI", "bps": -0.0, "usdt": 143.2}, {"symbol": "SYN", "bps": 1.1, "usdt": 113.5}, {"symbol": "US", "bps": 10.95, "usdt": 185.9}, {"symbol": "ZEREBRO", "bps": 2.5, "usdt": 216.5}, {"symbol": "EPIC", "bps": 36.93, "usdt": 176.6}, {"symbol": "IOTX", "bps": 3.75, "usdt": 224.7}, {"symbol": "BAS", "bps": 14.78, "usdt": 216.4}], "avg_slip": 8.1, "n_fills": 18, "events": [{"time": "2026-07-07 14:53", "kind": "DONE", "detail": "20260707-0922"}, {"time": "2026-07-07 14:53", "kind": "RECON_OK", "detail": "exchange matches expected positions (contracts)"}, {"time": "2026-07-07 14:53", "kind": "CYCLE", "detail": "20260707-0922: 16 targets, equity 4989.74"}, {"time": "2026-07-07 14:50", "kind": "DONE", "detail": "20260707-0920"}, {"time": "2026-07-07 14:50", "kind": "RECON_OK", "detail": "exchange matches expected positions (contracts)"}, {"time": "2026-07-07 14:50", "kind": "CYCLE", "detail": "20260707-0920: 16 targets, equity 4988.77"}, {"time": "2026-07-07 14:41", "kind": "DONE", "detail": "20260707-0911"}, {"time": "2026-07-07 14:41", "kind": "RECON_OK", "detail": "exchange matches expected positions (contracts)"}, {"time": "2026-07-07 14:41", "kind": "ORDER_FAIL", "detail": "SIREN/USDT:USDT: OperationRejected: binanceusdm {\"code\":-4131,\"msg\":\"The counterparty's best price does not meet the PERCENT_PRICE filter limit.\"}"}, {"time": "2026-07-07 14:41", "kind": "CYCLE", "detail": "20260707-0911: 16 targets, equity 4990.11"}, {"time": "2026-07-07 14:38", "kind": "DONE", "detail": "20260707-0907"}, {"time": "2026-07-07 14:38", "kind": "RECON_MISMATCH", "detail": "RDNT/USDT:USDT: exchange -236.2 vs local -225.0"}, {"time": "2026-07-07 14:38", "kind": "ORDER_FAIL", "detail": "SIREN/USDT:USDT: OperationRejected: binanceusdm {\"code\":-4131,\"msg\":\"The counterparty's best price does not meet the PERCENT_PRICE filter limit.\"}"}, {"time": "2026-07-07 14:38", "kind": "CYCLE", "detail": "20260707-0907: 16 targets, equity 5000.00"}, {"time": "2026-07-07 14:36", "kind": "DONE", "detail": "20260707-0905"}, {"time": "2026-07-07 14:36", "kind": "RECON_OK", "detail": "exchange matches expected positions"}, {"time": "2026-07-07 14:36", "kind": "CYCLE", "detail": "20260707-0905: 16 targets, equity 5000.00"}, {"time": "2026-07-07 14:35", "kind": "INIT", "detail": "initial equity 5000.00 USDT"}], "book": [{"symbol": "RDNT", "side": "SHORT", "usdt": 236.2}, {"symbol": "BEL", "side": "LONG", "usdt": 219.4}, {"symbol": "BAS", "side": "SHORT", "usdt": 215.9}, {"symbol": "ZEREBRO", "side": "LONG", "usdt": 215.7}, {"symbol": "US", "side": "LONG", "usdt": 196.5}, {"symbol": "GUA", "side": "SHORT", "usdt": 170.5}, {"symbol": "EPIC", "side": "SHORT", "usdt": 168.8}, {"symbol": "RIF", "side": "LONG", "usdt": 158.7}, {"symbol": "HMSTR", "side": "LONG", "usdt": 158.5}, {"symbol": "HEI", "side": "LONG", "usdt": 139.8}, {"symbol": "SKYAI", "side": "SHORT", "usdt": 133.9}, {"symbol": "AGT", "side": "SHORT", "usdt": 119.1}, {"symbol": "BEAT", "side": "SHORT", "usdt": 119.0}, {"symbol": "SYN", "side": "LONG", "usdt": 109.6}, {"symbol": "H", "side": "SHORT", "usdt": 91.3}, {"symbol": "LAB", "side": "LONG", "usdt": 50.1}], "gross": 2503.0, "net": -6.4};
+document.getElementById("c-eq").textContent = D.last.toFixed(2);
+const r = document.getElementById("c-ret");
+r.textContent = (D.ret_pct>=0?"+":"")+D.ret_pct+"%";
+r.className = "v "+(D.ret_pct>=0?"pos":"neg");
+document.getElementById("c-gross").textContent = D.gross||"–";
+document.getElementById("c-net").textContent = D.net||"–";
+document.getElementById("c-slip").textContent = D.avg_slip;
+document.getElementById("gen").textContent =
+  "Generated "+D.generated+" · "+D.n_fills+" fills recorded";
+new Chart(document.getElementById("chart"),{type:"line",
+ data:{labels:D.equity.map(e=>e[0]),
+       datasets:[{data:D.equity.map(e=>e[1]),borderColor:"#4059ad",
+                  backgroundColor:"rgba(64,89,173,.08)",fill:true,
+                  pointRadius:2,tension:.2,label:"Equity (USDT)"}]},
+ options:{plugins:{legend:{display:false}},
+          scales:{x:{ticks:{maxTicksLimit:8}}}}});
+function fill(id, rows, cols, cls){const t=document.getElementById(id);
+ rows.forEach(o=>{const tr=t.insertRow();
+  cols.forEach(c=>{const td=tr.insertCell();td.textContent=o[c];
+   if(cls&&c===cls&&parseFloat(o[c])>0)td.className="neg";
+   if(cls&&c===cls&&parseFloat(o[c])<0)td.className="pos";});});}
+fill("book", D.book, ["symbol","side","usdt"]);
+fill("slip", D.slippage, ["symbol","usdt","bps"], "bps");
+fill("ev", D.events, ["time","kind","detail"]);
+</script></body></html>

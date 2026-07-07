@@ -11,6 +11,5 @@ dist/
 build/
 .venv/
 venv/
-execution/journal.db
 backtest_gate/data/
 __pycache__/

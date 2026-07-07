@@ -13,3 +13,4 @@ build/
 venv/
 backtest_gate/data/
 __pycache__/
+execution/cycle_log.txt

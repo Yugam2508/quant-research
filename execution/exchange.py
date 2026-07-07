@@ -109,6 +109,10 @@ class Exchange:
             return None, 0.0, 0.0
         side = "buy" if notional_usdt > 0 else "sell"
         sign = 1 if side == "buy" else -1
+        try:
+            self.x.set_leverage(3, symbol)
+        except Exception:
+            pass  # some symbols reject leverage changes; order attempt decides
         o = self.x.create_order(
             symbol, "market", side, amount,
             params={"newClientOrderId": client_id[:36]},
